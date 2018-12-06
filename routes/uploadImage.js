@@ -2,58 +2,72 @@ var express = require('express');
 var router = express.Router();
 var path = require('path')
 var fs = require('fs')
-var multipart = require('connect-multiparty');
-/* GET home page. */
-var multipartMiddleware = multipart();
-router.post('/', multipartMiddleware, function (req, res) {
-    var form = new formidable.IncomingForm();   //创建上传表单
-    form.encoding = 'utf-8';        //设置编辑
-    form.uploadDir = 'public/images';     //设置上传目录
-    form.keepExtensions = true;     //保留后缀
-    form.maxFieldsSize = 2 * 1024 * 1024;   //文件大小
+const querystring = require('querystring');
+let uuid = () => {  //生成uuid方法
+    let s = [];
+    let hexDigits = "0123456789abcdef";
+    for (let i = 0; i < 36; i++) {
+        s[i] = hexDigits.substr(Math.floor(Math.random() * 0x10), 1);
+    }
+    s[14] = "4";  // bits 12-15 of the time_hi_and_version field to 0010
+    s[19] = hexDigits.substr((s[19] & 0x3) | 0x8, 1);  // bits 6-7 of the clock_seq_hi_and_reserved to 01
+    s[8] = s[13] = s[18] = s[23] = "-";
 
-    form.parse(req, function(err, fields, files) {
+    let uuid = s.join("");
+    return uuid;
+}
 
-        if (err) {
-            res.locals.error = err;
-            res.render('index', { title: TITLE });
-            return;
+router.post('/', (req, res, next) => {  //post请求  我这边用的是express router 
+    res.header('Access-Control-Allow-Origin', '*');
+    req.setEncoding('binary');
+    let body = '';   // 文件数据
+    // 边界字符串
+    let boundary = req.headers['content-type'].split('; ')[1].replace('boundary=', '');
+
+    //接收post如data 流 buffer
+    req.on('data', function (d) {
+        body += d;
+    });
+
+    req.on('end', function () {
+        let file = querystring.parse(body, '\r\n', ':');
+        let fileInfo = file['Content-Disposition'].split('; ');
+        let fileName = '';
+        let ext = '';
+        for (let value in fileInfo) {
+            if (fileInfo[value].indexOf("filename=") != -1) {
+                fileName = fileInfo[value].substring(10, fileInfo[value].length - 1);
+
+                if (fileName.indexOf('\\') != -1) {
+                    fileName = fileName.substring(fileName.lastIndexOf('\\') + 1);
+                }
+                ext = fileName.substr(fileName.indexOf('.') + 1, fileName.length);
+            }
         }
-        console.log(files);
 
-        var extName = '';  //后缀名
-        switch (files.fulAvatar.type) {
-            case 'image/pjpeg':
-                extName = 'jpg';
-                break;
-            case 'image/jpeg':
-                extName = 'jpg';
-                break;
-            case 'image/png':
-                extName = 'png';
-                break;
-            case 'image/x-png':
-                extName = 'png';
-                break;
-        }
+        let upperBoundary = body.toString().indexOf(file['Content-Type'].substring(1)) + file['Content-Type'].substring(1).length;
 
-        if(extName.length == 0){
-            res.locals.error = '只支持png和jpg格式图片';
-            res.render('index', { title: TITLE });
-            return;
-        }
+        let binaryDataAlmost = body.toString().substring(upperBoundary).replace(/^\s\s*/, '').replace(/\s\s*$/, '');
 
-        var avatarName = Math.random() + '.' + extName;
-        //图片写入地址；
-        var newPath = form.uploadDir + avatarName;
-        //显示地址；
-        var showUrl = domain + AVATAR_UPLOAD_FOLDER + avatarName;
-        console.log("newPath",newPath);
-        fs.renameSync(files.fulAvatar.path, newPath);  //重命名
-        res.json({
-            "newPath":showUrl
+         // 上传文件重命名
+        let uuidFileName = `${uuid()}.${ext}` 
+        //上传文件 本地存放地址
+        // let uploadDirFile = `./${uuidFileName}` 
+        let uploadDirFile = path.resolve(__dirname, `../public/file/${uuidFileName}`)
+        //创建文件流
+        let writerStream = fs.createWriteStream(uploadDirFile);
+
+        //开始 —— 写入文件到本地
+        writerStream.write(binaryDataAlmost.substring(0, binaryDataAlmost.indexOf(`--${boundary}--`)), 'binary'); 
+        //写入完成
+        writerStream.end();
+        writerStream.on('finish', function () {
+            console.log("写入完成。");
+            //删除刚刚创建好的本地文件 -> 只有在把文件存起来的时候需要删除掉本地，否则不要用。
+            // fs.unlinkSync(uploadDirFile) 
+            res.send({ data: uuidFileName, code: 0, msg: 'ok' })
         });
     });
-});
+})
 
 module.exports = router;
