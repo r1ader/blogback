@@ -8,6 +8,7 @@ var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users');
 var articleRouter = require('./routes/article');
 var createRouter = require('./routes/create');
+var transRouter = require('./routes/trans');
 var uploadImageRouter = require('./routes/uploadImage');
 var getImageRouter = require('./routes/getImage');
 
@@ -31,6 +32,7 @@ app.use('/article', articleRouter);
 app.use('/create', createRouter);
 app.use('/uploadimage', uploadImageRouter);
 app.use('/downloadimage', getImageRouter);
+app.use('/trans', transRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
